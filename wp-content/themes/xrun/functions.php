@@ -268,6 +268,11 @@ add_action('rest_api_init', function () {
         'methods' => 'GET',
         'callback' => 'get_xrun_run',
     ));
+
+    register_rest_route('xrun/v1', '/results/(?P<id>\d+)', array(
+        'methods' => 'GET',
+        'callback' => 'get_xrun_results',
+    ));
 });
 
 function get_xrun_run($data)
@@ -283,6 +288,21 @@ function get_xrun_run($data)
     }
 
     return $startingList;
+}
+
+function get_xrun_results($data)
+{
+    global $wpdb;
+    $data['id'] = (int) $data['id'];
+
+    // Get starting list for the given run from the database
+    $results = $wpdb->get_results($wpdb->prepare("SELECT list.*, runs.name AS run, dist.name AS distance FROM rnx_starting_results AS list LEFT JOIN rnx_starting_runs AS runs ON runs.runID = list.runID LEFT JOIN rnx_starting_distances AS dist ON dist.distanceID = list.distanceID WHERE list.runID = '" . $data['id'] . "' ORDER BY list.position ASC"));
+
+    if (empty($results)) {
+        $results = [];
+    }
+
+    return $results;
 }
 
 // Remove the existing action
