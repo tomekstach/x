@@ -354,4 +354,73 @@ add_filter('woocommerce_add_to_cart_redirect', 'custom_wc_get_cart_url', 100);
 
 // Optionally, you can also override the cart URL in other places
 add_filter('woocommerce_get_cart_url', 'custom_wc_get_cart_url', 100);
-// add_filter('woocommerce_cart_redirect_after_error', 'custom_wc_get_cart_url');
+
+// Schedule the cron event
+function custom_schedule_cron_event()
+{
+    if (!wp_next_scheduled('custom_cron_event')) {
+        wp_schedule_event(time(), 'hourly', 'custom_cron_event');
+    }
+}
+add_action('wp', 'custom_schedule_cron_event');
+
+// Callback function for the cron event
+function custom_cron_event_callback()
+{
+    // Update prices for the products
+    $args = array(
+        'category_name' => 'imprezy', // Category slug
+        'posts_per_page' => -1, // Number of posts to retrieve (-1 for all posts)
+    );
+
+    // Create a new WP_Query instance
+    $query = new WP_Query($args);
+
+    $currentTimestamp = time();
+
+    // Check if there are any posts to display
+    if ($query->have_posts()) {
+        while ($query->have_posts()) {
+            $query->the_post();
+            // Get the varation product ID
+            $variations = get_field('boks');
+            $variantionsNumber = count($variations);
+
+            for ($i = 0; $i < $variantionsNumber; $i++) {
+                $variationID = (int) get_field('boks_' . $i . '_identyfikator_wariantu');
+                $currentPrice = 0;
+                // Get price for the product
+                if ($variationID > 0) {
+                    $prices = get_field('boks_' . $i . '_cennik');
+                    $pricesNumber = count($prices);
+
+                    for ($j = 0; $j < $pricesNumber; $j++) {
+                        $price = get_field('boks_' . $i . '_cennik_' . $j . '_cena');
+                        $dateTo = get_field('boks_' . $i . '_cennik_' . $j . '_do_kiedy');
+                        // Create a DateTime object from the date string
+                        $dateTime = DateTime::createFromFormat('d/m/Y H:i:s', $dateTo . ' 23:59:59');
+                        // Get the timestamp from the DateTime object
+                        $timestamp = $dateTime->getTimestamp();
+
+                        if ($currentTimestamp < $timestamp and $currentPrice === 0) {
+                            $currentPrice = $price;
+                            // Update the price for the product
+                            update_post_meta($variationID, '_sale_price', $currentPrice);
+                            update_post_meta($variationID, '_sale_price_dates_to', $timestamp);
+                            echo 'Price updated for product ID: ' . $variationID . ' to: ' . $currentPrice . '<br>';
+                        }
+                    }
+
+                    // Disable the product if the current price is 0
+                    if ($currentPrice === 0) {
+                        // Disable the product
+                    }
+                }
+            }
+        }
+    }
+
+    // Restore original post data
+    wp_reset_postdata();
+}
+add_action('custom_cron_event', 'custom_cron_event_callback');
