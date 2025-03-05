@@ -445,5 +445,45 @@ function custom_cron_event_callback()
 
     // Restore original post data
     wp_reset_postdata();
+
+    // Query for all products
+    $args = array(
+        'post_type' => 'product',
+        'posts_per_page' => -1 // Retrieve all products
+    );
+
+    // Set as a draft product if the expiration date is earlier than the current date
+    // Create a new WP_Query instance
+    $query = new WP_Query($args);
+
+    // Check if there are any products to display
+    if ($query->have_posts()) {
+        while ($query->have_posts()) {
+            $query->the_post();
+            $productID = get_the_ID();
+            $date = get_field('data', $productID);
+
+            if (strlen($date) > 0) {
+                // Convert dd/mm/YYYY to timestamp
+                list($day, $month, $year) = explode('/', $date);
+                $formattedDate = "$year-$month-$day";
+                $dateTime = new DateTime($formattedDate);
+                $dateTime->modify("-3 days");
+                $currentDateTime = new DateTime();
+
+                // Check if the expiration date is earlier than the current date
+                if ($currentDateTime > $dateTime) {
+                    // Update the product status to 'draft' to disable visibility
+                    wp_update_post(array(
+                        'ID' => $productID,
+                        'post_status' => 'draft'
+                    ));
+                }
+            }
+        }
+    }
+
+    // Restore original post data
+    wp_reset_postdata();
 }
 add_action('custom_cron_event', 'custom_cron_event_callback');
