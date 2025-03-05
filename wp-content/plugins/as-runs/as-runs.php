@@ -1,4 +1,5 @@
 <?php
+
 /**
  * WL Import Users
  *
@@ -67,6 +68,61 @@ function as_runs_validation_callback($data)
     exit;
 }
 
+function as_runs_validation_import_callback($data)
+{
+    global $wpdb;
+
+    $runID = (int) $data['run'];
+    $distanceID = (int) $data['distance'];
+
+    // Get the run and distance name
+    $pmquery = "SELECT `name` FROM `" . $wpdb->base_prefix . "starting_runs` WHERE `runID` = '$runID'";
+    $runName = $wpdb->get_var($pmquery);
+
+    $pmquery = "SELECT `name` FROM `" . $wpdb->base_prefix . "starting_distances` WHERE `distanceID` = '$distanceID'";
+    $distanceName = $wpdb->get_var($pmquery);
+
+    // Get the file content
+    $file = $_FILES['resultsFile']['tmp_name'];
+    $fileContent = file_get_contents($file);
+    $fileContent = explode("\n", $fileContent);
+
+    // Clear the table for the run and distance
+    $pmquery = "DELETE FROM `" . $wpdb->base_prefix . "starting_list` WHERE `runID` = '$runID' and `distanceID` = '$distanceID'";
+    $wpdb->query($pmquery);
+
+    // Insert the new data
+    foreach ($fileContent as $line) {
+        $line = explode(';', $line);
+        $orderNumber = (int) $line[0];
+        $firstName = $line[1];
+        $surname = $line[2];
+        $address = $line[3];
+        $city = $line[4];
+        $postCode = $line[5];
+        $sex = $line[6];
+        $country = $line[7];
+        $birthDate = $line[8];
+        $club = $line[9];
+        $alarmPhone = $line[10];
+        $phone = $line[11];
+        $email = $line[12];
+        $paymentStatus = $line[13];
+        $meal = $line[14];
+
+        if ($paymentStatus == 'Opłacone') {
+            $paymentStatus = 'tak';
+        } else {
+            $paymentStatus = 'nie';
+        }
+
+        $pmquery = "INSERT INTO `" . $wpdb->base_prefix . "starting_list` (`runID`, `distanceID`, `orderNumber`, `firstName`, `surname`, `address`, `city`, `postCode`, `sex`, `country`, `birthDate`, `club`, `alarmPhone`, `phone`, `email`, `paymentStatus`, `meal`) VALUES ('$runID', '$distanceID', '$orderNumber', '$firstName', '$surname', '$address', '$city', '$postCode', '$sex', '$country', '$birthDate', '$club', '$alarmPhone', '$phone', '$email', '$paymentStatus', '$meal')";
+        $wpdb->query($pmquery);
+    }
+    exit;
+}
+
+
 function as_runs_main_settings_cb()
 {
     global $wpdb;
@@ -74,16 +130,16 @@ function as_runs_main_settings_cb()
     $pmquery = "SELECT `runID`, `name` FROM `" . $wpdb->base_prefix . "starting_runs`";
     $runs = $wpdb->get_results($pmquery);
 
-    ?>
+?>
     <select name="option_field_name[run]">
-      <?php
+        <?php
 
-    $i = 1;
-    foreach ($runs as $run) {
-        echo '<option value="' . $run->runID . '">' . $run->name . '</option>';
-        $i++;
-    }
-    ?>
+        $i = 1;
+        foreach ($runs as $run) {
+            echo '<option value="' . $run->runID . '">' . $run->name . '</option>';
+            $i++;
+        }
+        ?>
     </select>
     <?php
 
@@ -91,16 +147,53 @@ function as_runs_main_settings_cb()
     $distances = $wpdb->get_results($pmquery);
     ?>
     <select name="option_field_name[distance]">
-      <?php
+        <?php
 
-    $i = 1;
-    foreach ($distances as $distance) {
-        echo '<option value="' . $distance->distanceID . '">' . $distance->name . '</option>';
-        $i++;
-    }
-    ?>
+        $i = 1;
+        foreach ($distances as $distance) {
+            echo '<option value="' . $distance->distanceID . '">' . $distance->name . '</option>';
+            $i++;
+        }
+        ?>
+    </select>
+<?php
+}
+
+function as_runs_import_settings_cb()
+{
+    global $wpdb;
+
+    $pmquery = "SELECT `runID`, `name` FROM `" . $wpdb->base_prefix . "starting_runs`";
+    $runs = $wpdb->get_results($pmquery);
+
+?>
+    <select name="option_field_name[run]">
+        <?php
+
+        $i = 1;
+        foreach ($runs as $run) {
+            echo '<option value="' . $run->runID . '">' . $run->name . '</option>';
+            $i++;
+        }
+        ?>
     </select>
     <?php
+
+    $pmquery = "SELECT `distanceID`, `name` FROM `" . $wpdb->base_prefix . "starting_distances`";
+    $distances = $wpdb->get_results($pmquery);
+    ?>
+    <select name="option_field_name[distance]">
+        <?php
+
+        $i = 1;
+        foreach ($distances as $distance) {
+            echo '<option value="' . $distance->distanceID . '">' . $distance->name . '</option>';
+            $i++;
+        }
+        ?>
+    </select>
+    <input type="file" name="resultsFile" id="resultsFile">
+<?php
 }
 
 function as_runs_page_html()
@@ -109,22 +202,42 @@ function as_runs_page_html()
     if (!current_user_can('manage_options')) {
         return;
     }
-    ?>
+?>
     <div class="wrap">
-      <h1><?=esc_html(get_admin_page_title());?></h1>
-      <form action="options.php" method="post">
-        <?php settings_fields('as_runs_options_group');?>
-        <?php do_settings_sections('as_runs_page_html');?>
-        <?php submit_button('Eksport listy startowej');?>
-      </form>
+        <h1><?= esc_html(get_admin_page_title()); ?></h1>
+        <form action="options.php" method="post">
+            <?php settings_fields('as_runs_options_group'); ?>
+            <?php do_settings_sections('as_runs_page_html'); ?>
+            <?php submit_button('Eksport listy startowej'); ?>
+        </form>
     </div>
-    <?php
+<?php
+}
+
+function as_runs_import_html()
+{
+    // check user capabilities
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+?>
+    <div class="wrap">
+        <h1>Import wyników</h1>
+        <form action="options.php" method="post">
+            <?php settings_fields('as_runs_import_options_group'); ?>
+            <?php do_settings_sections('as_runs_import_html'); ?>
+            <?php submit_button('Import wyników'); ?>
+        </form>
+    </div>
+<?php
 }
 
 function plugin_admin_init()
 {
     register_setting('as_runs_options_group', 'option_field_name', 'as_runs_validation_callback');
+    register_setting('as_runs_import_options_group', 'option_field_name', 'as_runs_validation_import_callback');
     add_settings_section('as_runs_main_id', 'Listy startowe', 'as_runs_main_settings_cb', 'as_runs_page_html');
+    add_settings_section('as_runs_import_id', 'Import wyników', 'as_runs_import_settings_cb', 'as_runs_import_html');
 }
 add_action('admin_init', 'plugin_admin_init');
 
@@ -135,8 +248,17 @@ function as_runs_page()
         'Listy startowe',
         'Listy startowe',
         'manage_options',
-        'as-runs',
+        'as-runs-main',
         'as_runs_page_html'
+    );
+
+    add_submenu_page(
+        'tools.php',
+        'Import wyników',
+        'Import wyników',
+        'manage_options',
+        'as-runs-import',
+        'as_runs_import_html'
     );
 }
 add_action('admin_menu', 'as_runs_page');

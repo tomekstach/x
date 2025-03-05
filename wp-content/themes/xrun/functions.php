@@ -375,6 +375,9 @@ add_filter('woocommerce_add_to_cart_redirect', 'custom_wc_get_cart_url', 100);
 // Optionally, you can also override the cart URL in other places
 add_filter('woocommerce_get_cart_url', 'custom_wc_get_cart_url', 100);
 
+/**
+ * Function to remove change prices
+ */
 // Schedule the cron event
 function custom_schedule_cron_event()
 {
