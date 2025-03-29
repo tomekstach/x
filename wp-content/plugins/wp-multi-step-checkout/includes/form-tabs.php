@@ -1,4 +1,5 @@
 <?php
+
 /**
  * The steps tabs
  *
@@ -7,7 +8,7 @@
 
 defined('ABSPATH') || exit;
 
-$i = 0;
+$i                  = 0;
 // AstoSoft
 $number_of_steps = ($show_login_step) ? count($steps) + 1 + 2 : count($steps) + 2;
 $current_step_title = ($show_login_step) ? 'login' : key(array_slice($steps, 0, 1, true));
@@ -39,7 +40,9 @@ do_action('wpmc_before_tabs');
         <span>podsumowanie</span>
     </div>
 </div>
-<div class="wp-block-uagb-advanced-heading uagb-block-0bedd072"><h1 class="uagb-heading-text" id="checkout-step-header">dane zawodnika</h1></div>
+<div class="wp-block-uagb-advanced-heading uagb-block-0bedd072">
+    <h1 class="uagb-heading-text" id="checkout-step-header">dane zawodnika</h1>
+</div>
 <?php
 // AstoSoft - end
 ?>

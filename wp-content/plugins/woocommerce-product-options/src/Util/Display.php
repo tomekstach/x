@@ -24,8 +24,10 @@ final class Display
      */
     public static function get_groups_html($groups, $product)
     {
-        ob_start();
+        $displayed_attributes = [];
 
+        ob_start();
+        // AstoSoft
         print('<h2>Dodaj do pakietu</h2>');
 
         print('<div class="wpo-options-container">');
@@ -40,7 +42,7 @@ final class Display
             }
 
             if ($group->display_name) {
-                $context = 'group_name';
+                $context    = 'group_name';
                 $group_name = apply_filters('wc_product_options_get_output_string', $group->name, $group, $context);
                 printf('<h2 class="wpo-group-title">%s</h2>', esc_html($group_name));
             }
@@ -48,11 +50,21 @@ final class Display
             foreach ($options as $option) {
                 $class = Util::get_field_class($option->type);
 
-                if (!class_exists($class)) {
+                if (! class_exists($class)) {
                     continue;
                 }
 
                 $field = new $class($option, $product);
+
+                // Skip if we already output this attribute option.
+                if ($selected_attribute = $field->is_valid_attribute_option_for_product()) {
+                    if (in_array($selected_attribute, $displayed_attributes, true)) {
+                        continue;
+                    }
+
+                    $displayed_attributes[] = $selected_attribute;
+                    $displayed_attributes   = array_unique($displayed_attributes);
+                }
 
                 $field->render();
             }
@@ -126,15 +138,12 @@ final class Display
      * This method runs a filter to allow for further string customization,
      * including internationalization.
      *
-     * @param string $value        The string to output.
-     * @param string $id           A unique id assigned to the string.
-     * @param string $context        A title describing the string.
-     * @param string $content_type The type of content to output: either 'text', 'textarea' or 'editor'.
+     * @param string $string_value
+     * @param array $args
      * @return string
      */
     public static function get_output_string($string_value, $args)
     {
         return apply_filters('wc_product_options_get_frontend_string', $string_value, $args);
     }
-
 }

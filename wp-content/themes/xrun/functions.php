@@ -1,4 +1,5 @@
 <?php
+
 /**
  * XRUN Theme functions and definitions
  *
@@ -273,6 +274,11 @@ add_action('rest_api_init', function () {
         'methods' => 'GET',
         'callback' => 'get_xrun_results',
     ));
+
+    register_rest_route('xrun/v1', '/resultsKids/(?P<id>\d+)', array(
+        'methods' => 'GET',
+        'callback' => 'get_xrun_results_kids',
+    ));
 });
 
 function get_xrun_run($data)
@@ -296,7 +302,22 @@ function get_xrun_results($data)
     $data['id'] = (int) $data['id'];
 
     // Get starting list for the given run from the database
-    $results = $wpdb->get_results($wpdb->prepare("SELECT list.*, runs.name AS run, dist.name AS distance FROM rnx_starting_results AS list LEFT JOIN rnx_starting_runs AS runs ON runs.runID = list.runID LEFT JOIN rnx_starting_distances AS dist ON dist.distanceID = list.distanceID WHERE list.runID = '" . $data['id'] . "' ORDER BY list.position ASC"));
+    $results = $wpdb->get_results($wpdb->prepare("SELECT list.*, runs.name AS run, dist.name AS distance FROM rnx_starting_results AS list LEFT JOIN rnx_starting_runs AS runs ON runs.runID = list.runID LEFT JOIN rnx_starting_distances AS dist ON dist.distanceID = list.distanceID WHERE list.runID = '" . $data['id'] . "' AND list.distanceID != '4' ORDER BY list.position ASC"));
+
+    if (empty($results)) {
+        $results = [];
+    }
+
+    return $results;
+}
+
+function get_xrun_results_kids($data)
+{
+    global $wpdb;
+    $data['id'] = (int) $data['id'];
+
+    // Get starting list for the given run from the database
+    $results = $wpdb->get_results($wpdb->prepare("SELECT list.*, runs.name AS run, dist.name AS distance FROM rnx_starting_results AS list LEFT JOIN rnx_starting_runs AS runs ON runs.runID = list.runID LEFT JOIN rnx_starting_distances AS dist ON dist.distanceID = list.distanceID WHERE list.runID = '" . $data['id'] . "' AND list.distanceID = '4' ORDER BY list.id ASC"));
 
     if (empty($results)) {
         $results = [];
@@ -319,20 +340,27 @@ add_action('init', 'remove_astra_woocommerce_before_main_content');
 function custom_woocommerce_before_main_content()
 {
     // Your custom code here
-    ?>
+?>
     <div id="primary" class="content-area primary">
         <section class="ast-single-entry-banner" data-post-type="page" data-banner-layout="layout-2">
             <div class="ast-container">
                 <h1 class="entry-title" itemprop="headline">ZAPISY</h1>
                 <div class="ast-breadcrumbs-wrapper">
                     <div class="ast-breadcrumbs-inner">
-                        <nav role="navigation" aria-label="Breadcrumbs" class="breadcrumb-trail breadcrumbs"><div class="ast-breadcrumbs"><ul class="trail-items"><li class="trail-item trail-begin"><a href="https://x.astosoft.pl/" rel="home"><span>Home</span></a></li><li class="trail-item trail-end"><span><span>ZAPISY</span></span></li></ul></div></nav>
+                        <nav role="navigation" aria-label="Breadcrumbs" class="breadcrumb-trail breadcrumbs">
+                            <div class="ast-breadcrumbs">
+                                <ul class="trail-items">
+                                    <li class="trail-item trail-begin"><a href="https://x.astosoft.pl/" rel="home"><span>Home</span></a></li>
+                                    <li class="trail-item trail-end"><span><span>ZAPISY</span></span></li>
+                                </ul>
+                            </div>
+                        </nav>
                     </div>
                 </div>
             </div>
         </section>
 
-        <?php astra_primary_content_top();?>
+        <?php astra_primary_content_top(); ?>
 
         <main id="main" class="site-main">
             <div class="ast-woocommerce-container">
@@ -358,132 +386,134 @@ function custom_woocommerce_before_main_content()
                     </div>
                 </div>
 
-                <div class="wp-block-uagb-advanced-heading uagb-block-0bedd072"><h1 class="uagb-heading-text">wybierz dystans</h1></div>
-    <?php
-}
-add_action('woocommerce_before_main_content', 'custom_woocommerce_before_main_content');
+                <div class="wp-block-uagb-advanced-heading uagb-block-0bedd072">
+                    <h1 class="uagb-heading-text">wybierz dystans</h1>
+                </div>
+            <?php
+        }
+        add_action('woocommerce_before_main_content', 'custom_woocommerce_before_main_content');
 
-remove_filter('woocommerce_get_cart_url', 'astra_woocommerce_get_cart_url');
+        remove_filter('woocommerce_get_cart_url', 'astra_woocommerce_get_cart_url');
 
-// Override the cart URL
-function custom_wc_get_cart_url()
-{
-    return site_url('/zamowienie/'); // Replace with your custom cart URL
-}
-add_filter('woocommerce_add_to_cart_redirect', 'custom_wc_get_cart_url', 100);
+        // Override the cart URL
+        function custom_wc_get_cart_url()
+        {
+            return site_url('/zamowienie/'); // Replace with your custom cart URL
+        }
+        add_filter('woocommerce_add_to_cart_redirect', 'custom_wc_get_cart_url', 100);
 
-// Optionally, you can also override the cart URL in other places
-add_filter('woocommerce_get_cart_url', 'custom_wc_get_cart_url', 100);
+        // Optionally, you can also override the cart URL in other places
+        add_filter('woocommerce_get_cart_url', 'custom_wc_get_cart_url', 100);
 
-/**
- * Function to remove change prices
- */
-// Schedule the cron event
-function custom_schedule_cron_event()
-{
-    if (!wp_next_scheduled('custom_cron_event')) {
-        wp_schedule_event(time(), 'hourly', 'custom_cron_event');
-    }
-}
-add_action('wp', 'custom_schedule_cron_event');
+        /**
+         * Function to remove change prices
+         */
+        // Schedule the cron event
+        function custom_schedule_cron_event()
+        {
+            if (!wp_next_scheduled('custom_cron_event')) {
+                wp_schedule_event(time(), 'hourly', 'custom_cron_event');
+            }
+        }
+        add_action('wp', 'custom_schedule_cron_event');
 
-// Callback function for the cron event
-function custom_cron_event_callback()
-{
-    // Update prices for the products
-    $args = array(
-        'category_name' => 'imprezy', // Category slug
-        'posts_per_page' => -1, // Number of posts to retrieve (-1 for all posts)
-    );
+        // Callback function for the cron event
+        function custom_cron_event_callback()
+        {
+            // Update prices for the products
+            $args = array(
+                'category_name' => 'imprezy', // Category slug
+                'posts_per_page' => -1, // Number of posts to retrieve (-1 for all posts)
+            );
 
-    // Create a new WP_Query instance
-    $query = new WP_Query($args);
+            // Create a new WP_Query instance
+            $query = new WP_Query($args);
 
-    $currentTimestamp = time();
+            $currentTimestamp = time();
 
-    // Check if there are any posts to display
-    if ($query->have_posts()) {
-        while ($query->have_posts()) {
-            $query->the_post();
-            // Get the varation product ID
-            $variations = get_field('boks');
-            $variantionsNumber = count($variations);
+            // Check if there are any posts to display
+            if ($query->have_posts()) {
+                while ($query->have_posts()) {
+                    $query->the_post();
+                    // Get the varation product ID
+                    $variations = get_field('boks');
+                    $variantionsNumber = count($variations);
 
-            for ($i = 0; $i < $variantionsNumber; $i++) {
-                $variationID = (int) get_field('boks_' . $i . '_identyfikator_wariantu');
-                $currentPrice = 0;
-                // Get price for the product
-                if ($variationID > 0) {
-                    $prices = get_field('boks_' . $i . '_cennik');
-                    $pricesNumber = count($prices);
+                    for ($i = 0; $i < $variantionsNumber; $i++) {
+                        $variationID = (int) get_field('boks_' . $i . '_identyfikator_wariantu');
+                        $currentPrice = 0;
+                        // Get price for the product
+                        if ($variationID > 0) {
+                            $prices = get_field('boks_' . $i . '_cennik');
+                            $pricesNumber = count($prices);
 
-                    for ($j = 0; $j < $pricesNumber; $j++) {
-                        $price = get_field('boks_' . $i . '_cennik_' . $j . '_cena');
-                        $dateTo = get_field('boks_' . $i . '_cennik_' . $j . '_do_kiedy');
-                        // Create a DateTime object from the date string
-                        $dateTime = DateTime::createFromFormat('d/m/Y H:i:s', $dateTo . ' 23:59:59');
-                        // Get the timestamp from the DateTime object
-                        $timestamp = $dateTime->getTimestamp();
+                            for ($j = 0; $j < $pricesNumber; $j++) {
+                                $price = get_field('boks_' . $i . '_cennik_' . $j . '_cena');
+                                $dateTo = get_field('boks_' . $i . '_cennik_' . $j . '_do_kiedy');
+                                // Create a DateTime object from the date string
+                                $dateTime = DateTime::createFromFormat('d/m/Y H:i:s', $dateTo . ' 23:59:59');
+                                // Get the timestamp from the DateTime object
+                                $timestamp = $dateTime->getTimestamp();
 
-                        if ($currentTimestamp < $timestamp and $currentPrice === 0) {
-                            $currentPrice = $price;
-                            // Update the price for the product
-                            update_post_meta($variationID, '_sale_price', $currentPrice);
-                            update_post_meta($variationID, '_sale_price_dates_to', $timestamp);
-                            echo 'Price updated for product ID: ' . $variationID . ' to: ' . $currentPrice . '<br>';
+                                if ($currentTimestamp < $timestamp and $currentPrice === 0) {
+                                    $currentPrice = $price;
+                                    // Update the price for the product
+                                    update_post_meta($variationID, '_sale_price', $currentPrice);
+                                    update_post_meta($variationID, '_sale_price_dates_to', $timestamp);
+                                    echo 'Price updated for product ID: ' . $variationID . ' to: ' . $currentPrice . '<br>';
+                                }
+                            }
+
+                            // Disable the product if the current price is 0
+                            if ($currentPrice === 0) {
+                                // Disable the product
+                            }
                         }
                     }
+                }
+            }
 
-                    // Disable the product if the current price is 0
-                    if ($currentPrice === 0) {
-                        // Disable the product
+            // Restore original post data
+            wp_reset_postdata();
+
+            // Query for all products
+            $args = array(
+                'post_type' => 'product',
+                'posts_per_page' => -1 // Retrieve all products
+            );
+
+            // Set as a draft product if the expiration date is earlier than the current date
+            // Create a new WP_Query instance
+            $query = new WP_Query($args);
+
+            // Check if there are any products to display
+            if ($query->have_posts()) {
+                while ($query->have_posts()) {
+                    $query->the_post();
+                    $productID = get_the_ID();
+                    $date = get_field('data', $productID);
+
+                    if (strlen($date) > 0) {
+                        // Convert dd/mm/YYYY to timestamp
+                        list($day, $month, $year) = explode('/', $date);
+                        $formattedDate = "$year-$month-$day";
+                        $dateTime = new DateTime($formattedDate);
+                        $dateTime->modify("-3 days");
+                        $currentDateTime = new DateTime();
+
+                        // Check if the expiration date is earlier than the current date
+                        if ($currentDateTime > $dateTime) {
+                            // Update the product status to 'draft' to disable visibility
+                            wp_update_post(array(
+                                'ID' => $productID,
+                                'post_status' => 'draft'
+                            ));
+                        }
                     }
                 }
             }
+
+            // Restore original post data
+            wp_reset_postdata();
         }
-    }
-
-    // Restore original post data
-    wp_reset_postdata();
-
-    // Query for all products
-    $args = array(
-        'post_type' => 'product',
-        'posts_per_page' => -1 // Retrieve all products
-    );
-
-    // Set as a draft product if the expiration date is earlier than the current date
-    // Create a new WP_Query instance
-    $query = new WP_Query($args);
-
-    // Check if there are any products to display
-    if ($query->have_posts()) {
-        while ($query->have_posts()) {
-            $query->the_post();
-            $productID = get_the_ID();
-            $date = get_field('data', $productID);
-
-            if (strlen($date) > 0) {
-                // Convert dd/mm/YYYY to timestamp
-                list($day, $month, $year) = explode('/', $date);
-                $formattedDate = "$year-$month-$day";
-                $dateTime = new DateTime($formattedDate);
-                $dateTime->modify("-3 days");
-                $currentDateTime = new DateTime();
-
-                // Check if the expiration date is earlier than the current date
-                if ($currentDateTime > $dateTime) {
-                    // Update the product status to 'draft' to disable visibility
-                    wp_update_post(array(
-                        'ID' => $productID,
-                        'post_status' => 'draft'
-                    ));
-                }
-            }
-        }
-    }
-
-    // Restore original post data
-    wp_reset_postdata();
-}
-add_action('custom_cron_event', 'custom_cron_event_callback');
+        add_action('custom_cron_event', 'custom_cron_event_callback');
