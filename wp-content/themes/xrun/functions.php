@@ -169,10 +169,10 @@ function custom_update_order($order_id)
                 $data = $metaItem->get_data();
 
                 switch ($data['key']) {
-                    case '_billing_birth_date':
+                    case 'billing_birth_date':
                         $birthDate = $metaItem->value;
                         break;
-                    case '_billing_sex':
+                    case 'billing_sex':
                         $sex = $metaItem->value;
                         if ($sex === 'mezczyzna') {
                             $sex = 'mezczyzna';
@@ -180,10 +180,10 @@ function custom_update_order($order_id)
                             $sex = 'kobieta';
                         }
                         break;
-                    case '_billing_alarm_phone':
+                    case 'billing_alarm_phone':
                         $alarmPhone = $metaItem->value;
                         break;
-                    case '_billing_meal':
+                    case 'billing_meal':
                         $meal = $metaItem->value;
                         if ($meal === 'miesny') {
                             $meal = 'miesny';
@@ -191,7 +191,7 @@ function custom_update_order($order_id)
                             $meal = 'vege';
                         }
                         break;
-                    case '_billing_club':
+                    case 'billing_club':
                         $club = $metaItem->value;
                         break;
                 }
@@ -517,3 +517,6 @@ function custom_woocommerce_before_main_content()
             wp_reset_postdata();
         }
         add_action('custom_cron_event', 'custom_cron_event_callback');
+
+        // Add possibility
+        add_filter('acf/settings/remove_wp_meta_box', '__return_false');
