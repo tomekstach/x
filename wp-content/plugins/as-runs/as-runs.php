@@ -56,6 +56,10 @@ function as_runs_validation_callback($data)
             $status = 'Nieopłacone';
         }
 
+        if ($player->club == 'null') {
+            $player->club = '';
+        }
+
         fputcsv($fp, [$orderID, $player->firstName, $player->surname, $player->address, $player->city, $player->postCode, $player->sex, $player->country, $player->birthDate, $player->club, $player->alarmPhone, $player->phone, $player->email, $status, $player->meal], ';');
     }
 
