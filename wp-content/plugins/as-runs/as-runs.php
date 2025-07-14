@@ -76,6 +76,44 @@ function as_runs_validation_import_callback($data)
 {
     global $wpdb;
 
+    $cupPointsTable30 = [
+        1 => 1000,
+        2 => 980,
+        3 => 960,
+        4 => 950,
+        5 => 945,
+        6 => 940,
+        7 => 936,
+        8 => 932,
+        9 => 929,
+        10 => 926,
+        11 => 924,
+        12 => 922,
+        13 => 920,
+        14 => 918,
+        15 => 916,
+        16 => 915,
+        17 => 914,
+        18 => 913,
+        19 => 912,
+        20 => 911,
+        21 => 910,
+        22 => 909,
+        23 => 908,
+        24 => 907,
+        25 => 906,
+        26 => 905,
+        27 => 904,
+        28 => 903,
+        29 => 902,
+        30 => 901,
+    ];
+
+    $sexPlace = [
+        'mezczyzna' => 1,
+        'kobieta' => 1,
+    ];
+
     $runID = (int) $data['run'];
     $distanceID = (int) $data['distance'];
 
@@ -150,15 +188,23 @@ function as_runs_validation_import_callback($data)
             }
             $categoryPosition = $categoryPositions[$category . ' - ' . $sex];
         } else {
-            // Convert birthday to category
-            $category = getRunCategory($birthday, $sex, $distanceName);
-
             $sex = $line[4];
             if ($sex == 'M') {
                 $sex = 'mezczyzna';
             } else {
                 $sex = 'kobieta';
             }
+
+            if ($sexPlace[$sex] > 30) {
+                $cupPoints = 900 - ($sexPlace[$sex] - 31);
+            } else {
+                $cupPoints = $cupPointsTable30[$sexPlace[$sex]];
+            }
+
+            $sexPlace[$sex]++;
+
+            // Convert birthday to category
+            $category = getRunCategory($birthday, $sex, $distanceName);
 
             if (array_key_exists($category, $categoryPositions) == false) {
                 $categoryPositions[$category] = 1;
@@ -170,13 +216,19 @@ function as_runs_validation_import_callback($data)
 
         //$nationality = $line[6];
         $startingNumber = $line[7];
-        //$city = $line[8];
+        $city = $line[8];
         $club = $line[9];
+        if (strlen(trim($club)) > 0) {
+            $club = $club;
+        } else {
+            $club = '-';
+        }
 
         $insertData = [
             'runID' => $runID,
             'distanceID' => $distanceID,
             'position' => $position,
+            'positionSex' => $sexPlace[$sex] - 1 ?? 0,
             'categoryPosition' => $categoryPosition,
             'time' => $time,
             'surname' => $surname,
@@ -185,9 +237,11 @@ function as_runs_validation_import_callback($data)
             'category' => $category,
             'startingNumber' => $startingNumber,
             'club' => $club,
+            'city' => $city,
+            'cupPoints' => $cupPoints ?? 0,
         ];
 
-        $format = ['%d', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%d', '%s'];
+        $format = ['%d', '%d', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s'];
         $wpdb->insert($table, $insertData, $format);
         $i++;
     }

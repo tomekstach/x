@@ -106,6 +106,12 @@ final class Display
         );
 
         $exclude_price = Option_Model::get_product_price_exclusion_status($product);
+        $product_meta  = array_filter(
+            $product->get_meta_data(),
+            function ($meta) {
+                return strpos($meta->key, '_') !== 0;
+            }
+        );
 
         $html = sprintf(
             '<div class="wpo-totals-container"
@@ -115,6 +121,7 @@ final class Display
 				data-width="%6$s"
 				data-length="%7$s"
 				data-height="%8$s"
+				data-meta="%9$s"
 			>
 				<span class="wpo-totals-label">%3$s<span>
 				%2$s
@@ -126,7 +133,8 @@ final class Display
             esc_attr($product->get_weight()),
             esc_attr($product->get_width()),
             esc_attr($product->get_length()),
-            esc_attr($product->get_height())
+            esc_attr($product->get_height()),
+            esc_attr(json_encode(array_values($product_meta)))
         );
 
         return $html;
@@ -145,5 +153,33 @@ final class Display
     public static function get_output_string($string_value, $args)
     {
         return apply_filters('wc_product_options_get_frontend_string', $string_value, $args);
+    }
+
+    public static function get_product_attributes($product)
+    {
+        if (is_a($product, 'WC_Product_Variable')) {
+            return [];
+        }
+
+        // get all the terms for each product attribute assigned to this product
+        // this is used in the conditional logic
+        $terms = [];
+
+        foreach ($product->get_attributes() as $attribute) {
+            $attribute_terms                 = get_the_terms($product->get_id(), $attribute->get_name());
+
+            if (empty($attribute_terms) || is_wp_error($attribute_terms)) {
+                continue;
+            }
+
+            $terms[$attribute->get_name()] = array_map(
+                function ($term) {
+                    return $term->slug;
+                },
+                $attribute_terms
+            );
+        }
+
+        return $terms;
     }
 }

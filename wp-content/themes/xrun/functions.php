@@ -165,6 +165,12 @@ function custom_update_order($order_id)
             $distance = searchForValue($attributes['dystans'], 'name', $distances);
             $run = searchForValue($productID, 'productID', $runs);
 
+            $club = '-';
+            $sex = 'kobieta';
+            $meal = 'vege';
+            $birthDate = '';
+            $alarmPhone = '';
+
             foreach ($order->meta_data as $metaItem) {
                 $data = $metaItem->get_data();
 
@@ -193,6 +199,11 @@ function custom_update_order($order_id)
                         break;
                     case 'billing_club':
                         $club = $metaItem->value;
+                        if (strlen(trim($club)) > 0) {
+                            $club = $club;
+                        } else {
+                            $club = '-';
+                        }
                         break;
                 }
             }
@@ -284,6 +295,11 @@ add_action('rest_api_init', function () {
         'methods' => 'GET',
         'callback' => 'get_xrun_current_run',
     ));
+
+    register_rest_route('xrun/v1', '/cupResults/', array(
+        'methods' => 'GET',
+        'callback' => 'get_xrun_cup_results',
+    ));
 });
 
 function get_xrun_run($data)
@@ -326,6 +342,89 @@ function get_xrun_results_kids($data)
 
     if (empty($results)) {
         $results = [];
+    }
+
+    return $results;
+}
+
+function get_xrun_cup_results($data)
+{
+    global $wpdb;
+    // Get the list of runs for the current year
+    $runs = $wpdb->get_results("SELECT * FROM rnx_starting_runs WHERE year = YEAR(CURDATE())");
+
+    // Get the list of distances
+    $distances = $wpdb->get_results("SELECT * FROM rnx_starting_distances WHERE distanceID != 4 ORDER BY distanceID ASC");
+
+    // Prepare the results array
+    $results = [];
+
+    // Loop through each distance
+    foreach ($distances as $distance) {
+        // Prepare the results for the current distance
+        $distanceResults = [
+            'distance' => $distance->name,
+            'results' => []
+        ];
+
+        // Loop through each run
+        foreach ($runs as $run) {
+            // Get the results for the current run and distance
+            $runResults = $wpdb->get_results($wpdb->prepare("SELECT firstName, surname, sex, club, category, city, cupPoints FROM rnx_starting_results WHERE runID = %d AND distanceID = %d ORDER BY position ASC", $run->runID, $distance->distanceID));
+
+            foreach ($runResults as $result) {
+                // Find the runner
+                $matchedResult = array_filter($distanceResults['results'], function ($r) use ($result) {
+                    return $r->firstName === $result->firstName && $r->surname === $result->surname && $r->category === $result->category && $r->city === $result->city;
+                });
+                if (!empty($matchedResult)) {
+                    // If the runner already exists, update their points
+                    // Get the matched key
+                    $matchedKey = array_key_first($matchedResult);
+                    $matchedResult = $matchedResult[$matchedKey];
+                    $matchedResult->cupPoints += (int) $result->cupPoints;
+                    $distanceResults['results'][$matchedKey] = $matchedResult;
+                } else {
+                    // If the runner does not exist, add them to the results
+                    $matchedResult = $result;
+                    $matchedResult->cupPoints = (int) $result->cupPoints;
+                    $distanceResults['results'][] = $matchedResult;
+                }
+            }
+        }
+
+        // Sort the results by cup points in descending order
+        usort($distanceResults['results'], function ($a, $b) {
+            return $b->cupPoints <=> $a->cupPoints;
+        });
+
+        // If there are results for the current distance, add them to the main results array
+        if (!empty($distanceResults['results'])) {
+            // Get all runners results for the current distance
+            foreach ($distanceResults['results'] as $key => $result) {
+                $runResults = $wpdb->get_results($wpdb->prepare("SELECT runID, startingNumber, time, cupPoints, position, positionSex FROM rnx_starting_results WHERE distanceID = %d AND firstName = %s AND surname = %s AND category = %s AND city = %s ORDER BY position ASC", $distance->distanceID, $result->firstName, $result->surname, $result->category, $result->city));
+                if (!empty($runResults)) {
+                    foreach ($runResults as $runResult) {
+                        // Find the run name
+                        $runName = array_filter($runs, function ($r) use ($runResult) {
+                            return $r->runID === $runResult->runID;
+                        });
+                        if (!empty($runName)) {
+                            $runName = array_shift($runName);
+                            $runResult->runName = $runName->name;
+                        } else {
+                            $runResult->runName = 'Unknown Run';
+                        }
+                        $runResult->runName = $runName->name . ' - ' . $distance->name;
+                        unset($runResult->runID);
+                    }
+                    $distanceResults['results'][$key]->runResults = $runResults;
+                }
+            }
+            $results[] = $distanceResults;
+        }
+
+        unset($distanceResults);
     }
 
     return $results;
