@@ -370,7 +370,7 @@ function get_xrun_cup_results($data)
         // Loop through each run
         foreach ($runs as $run) {
             // Get the results for the current run and distance
-            $runResults = $wpdb->get_results($wpdb->prepare("SELECT firstName, surname, sex, club, category, city, cupPoints FROM rnx_starting_results WHERE runID = %d AND distanceID = %d ORDER BY position ASC", $run->runID, $distance->distanceID));
+            $runResults = $wpdb->get_results($wpdb->prepare("SELECT firstName, surname, sex, club, category, city FROM rnx_starting_results WHERE runID = %d AND distanceID = %d ORDER BY position ASC", $run->runID, $distance->distanceID));
 
             foreach ($runResults as $result) {
                 // Find the runner
@@ -382,21 +382,15 @@ function get_xrun_cup_results($data)
                     // Get the matched key
                     $matchedKey = array_key_first($matchedResult);
                     $matchedResult = $matchedResult[$matchedKey];
-                    $matchedResult->cupPoints += (int) $result->cupPoints;
                     $distanceResults['results'][$matchedKey] = $matchedResult;
                 } else {
                     // If the runner does not exist, add them to the results
                     $matchedResult = $result;
-                    $matchedResult->cupPoints = (int) $result->cupPoints;
+                    $matchedResult->cupPoints = 0;
                     $distanceResults['results'][] = $matchedResult;
                 }
             }
         }
-
-        // Sort the results by cup points in descending order
-        usort($distanceResults['results'], function ($a, $b) {
-            return $b->cupPoints <=> $a->cupPoints;
-        });
 
         // If there are results for the current distance, add them to the main results array
         if (!empty($distanceResults['results'])) {
@@ -404,7 +398,8 @@ function get_xrun_cup_results($data)
             foreach ($distanceResults['results'] as $key => $result) {
                 $runResults = $wpdb->get_results($wpdb->prepare("SELECT runID, startingNumber, time, cupPoints, position, positionSex FROM rnx_starting_results WHERE distanceID = %d AND firstName = %s AND surname = %s AND category = %s AND city = %s ORDER BY position ASC", $distance->distanceID, $result->firstName, $result->surname, $result->category, $result->city));
                 if (!empty($runResults)) {
-                    foreach ($runResults as $runResult) {
+                    $runResultsTemp = [];
+                    foreach ($runResults as &$runResult) {
                         // Find the run name
                         $runName = array_filter($runs, function ($r) use ($runResult) {
                             return $r->runID === $runResult->runID;
@@ -416,11 +411,30 @@ function get_xrun_cup_results($data)
                             $runResult->runName = 'Unknown Run';
                         }
                         $runResult->runName = $runName->name . ' - ' . $distance->name;
+                        $runResultsTemp[] = (int) $runResult->cupPoints;
                         unset($runResult->runID);
+                    }
+                    // Sort the results by cup points in descending order
+                    usort($runResultsTemp, function ($a, $b) {
+                        return $b <=> $a;
+                    });
+                    $i = 0;
+                    foreach ($runResultsTemp as $runResultTemp) {
+                        if ($i > 2) {
+                            break;
+                        }
+                        $distanceResults['results'][$key]->cupPoints += $runResultTemp;
+                        $i++;
                     }
                     $distanceResults['results'][$key]->runResults = $runResults;
                 }
             }
+
+            // Sort the results by cup points in descending order
+            usort($distanceResults['results'], function ($a, $b) {
+                return $b->cupPoints <=> $a->cupPoints;
+            });
+
             $results[] = $distanceResults;
         }
 
