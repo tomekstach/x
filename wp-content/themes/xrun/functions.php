@@ -61,7 +61,7 @@ function custom_before_order_review_heading()
     if (wp_doing_ajax()) {
         add_action('woocommerce_checkout_order_review', 'woocommerce_order_review', 10);
     } else {
-        echo '<div class="woocommerce_checkout-your-runs"><h4>Wybrałeś biegi:</h4><div>';
+        echo '<div class="woocommerce_checkout-your-runs"><h4>' . esc_html__('Wybrałeś biegi:', 'woocommerce') . '</h4><div>';
         $i = 0;
         foreach ($items as $item => $values) {
             $getProductDetail = wc_get_product($values['product_id']);
@@ -69,11 +69,11 @@ function custom_before_order_review_heading()
             $i++;
         }
         if ($i == 0) {
-            echo '<p>Brak biegów w koszyku</p>';
+            echo '<p>' . esc_html__('Brak biegów w koszyku', 'woocommerce') . '</p>';
         }
 
         if ($i <= 5) {
-            echo '<a href="/zapisy" id="your-runs-add"><img src="/wp-content/uploads/2024/12/dodaj-bieg.png" alt="Dodaj kolejny bieg" /></a>';
+            echo '<a href="' . wpml_url_by_slug('zapisy', 'page') . '" id="your-runs-add"><img src="/wp-content/uploads/2024/12/dodaj-bieg.png" alt="' . esc_attr__('Dodaj kolejny bieg', 'woocommerce') . '" /></a>';
         }
         echo '</div></div>';
     }
@@ -103,7 +103,7 @@ function allowed_products_variation_in_the_cart($passed, $product_id, $quantity,
             if (array_key_exists('attribute_typ', $cart_item['variation'])) {
                 if ($cart_item['variation']['attribute_typ'] === 'Bieg') {
                     if ($cart_product_id == $product_id) {
-                        wc_add_notice(__('Ten bieg został już dodany do koszyka!', 'domain'), 'error');
+                        wc_add_notice(__('Ten bieg został już dodany do koszyka!', 'woocommerce'), 'error');
                         $passed = false; // don't add the new product to the cart
                         break;
                     }
@@ -119,7 +119,7 @@ function allowed_products_variation_in_the_cart($passed, $product_id, $quantity,
     }
 
     if ($kids and $adults) {
-        wc_add_notice(__('Nie można dodać biegu Kids i dorosłego do koszyka jednocześnie!', 'domain'), 'error');
+        wc_add_notice(__('Nie można dodać biegu Kids i dorosłego do koszyka jednocześnie!', 'woocommerce'), 'error');
         $passed = false; // don't add the new product to the cart
     }
 
@@ -136,8 +136,13 @@ function custom_update_order($order_id)
         $runs = $wpdb->get_results("SELECT * FROM rnx_starting_runs WHERE year = YEAR(CURDATE())");
     }
 
+    $runsIDs = [];
+    foreach ($runs as $key => $run) {
+        $runsIDs[] = $run->runID;
+    }
+
     // Get distances from the database
-    $distances = $wpdb->get_results("SELECT * FROM rnx_starting_distances");
+    $distances = $wpdb->get_results("SELECT distance.*, run_distance.ordering FROM rnx_starting_distances AS distance LEFT JOIN rnx_starting_runs_distances AS run_distance ON run_distance.distanceID = distance.distanceID WHERE run_distance.runID IN (" . implode(',', $runsIDs) . ") ORDER BY run_distance.ordering ASC");
 
     $order = wc_get_order($order_id);
     $status = $order->get_status();
@@ -244,7 +249,7 @@ add_filter('woocommerce_return_to_shop_redirect', 'custom_woocommerce_return_to_
 
 function custom_woocommerce_return_to_shop_redirect()
 {
-    return site_url() . '/zapisy/';
+    return wpml_url_by_slug('zapisy', 'page');
 }
 
 /**
@@ -256,7 +261,7 @@ function custom_woocommerce_return_to_shop_redirect()
  */
 function custom_woocommerce_return_to_shop_text_filter($default_text)
 {
-    $default_text = 'Wróć do zapisów';
+    $default_text = esc_html__('Wróć do zapisów', 'woocommerce');
     return $default_text;
 }
 add_filter('woocommerce_return_to_shop_text', 'custom_woocommerce_return_to_shop_text_filter');
@@ -296,7 +301,7 @@ add_action('rest_api_init', function () {
         'callback' => 'get_xrun_current_run',
     ));
 
-    register_rest_route('xrun/v1', '/cupResults/', array(
+    register_rest_route('xrun/v1', '/cupResults/(?P<year>\d+)', array(
         'methods' => 'GET',
         'callback' => 'get_xrun_cup_results',
     ));
@@ -351,7 +356,9 @@ function get_xrun_cup_results($data)
 {
     global $wpdb;
     // Get the list of runs for the current year
-    $runs = $wpdb->get_results("SELECT * FROM rnx_starting_runs WHERE year = YEAR(CURDATE())");
+    $data['year'] = (int) $data['year'];
+    $data['year'] = ($data['year'] >= 2025 and $data['year'] <= date('Y')) ? $data['year'] : date('Y');
+    $runs = $wpdb->get_results($wpdb->prepare("SELECT * FROM rnx_starting_runs WHERE year = %d", $data['year']));
 
     // Get the list of distances
     $distances = $wpdb->get_results("SELECT * FROM rnx_starting_distances WHERE distanceID != 4 ORDER BY distanceID ASC");
@@ -370,12 +377,12 @@ function get_xrun_cup_results($data)
         // Loop through each run
         foreach ($runs as $run) {
             // Get the results for the current run and distance
-            $runResults = $wpdb->get_results($wpdb->prepare("SELECT firstName, surname, sex, club, category, city FROM rnx_starting_results WHERE runID = %d AND distanceID = %d ORDER BY position ASC", $run->runID, $distance->distanceID));
+            $runResults = $wpdb->get_results($wpdb->prepare("SELECT firstName, surname, sex, club, city FROM rnx_starting_results WHERE runID = %d AND distanceID = %d ORDER BY position ASC", $run->runID, $distance->distanceID));
 
             foreach ($runResults as $result) {
                 // Find the runner
                 $matchedResult = array_filter($distanceResults['results'], function ($r) use ($result) {
-                    return $r->firstName === $result->firstName && $r->surname === $result->surname && $r->category === $result->category && $r->city === $result->city;
+                    return $r->firstName === $result->firstName && $r->surname === $result->surname && $r->city === $result->city && $r->sex === $result->sex;
                 });
                 if (!empty($matchedResult)) {
                     // If the runner already exists, update their points
@@ -396,7 +403,7 @@ function get_xrun_cup_results($data)
         if (!empty($distanceResults['results'])) {
             // Get all runners results for the current distance
             foreach ($distanceResults['results'] as $key => $result) {
-                $runResults = $wpdb->get_results($wpdb->prepare("SELECT runID, startingNumber, time, cupPoints, position, positionSex FROM rnx_starting_results WHERE distanceID = %d AND firstName = %s AND surname = %s AND category = %s AND city = %s ORDER BY position ASC", $distance->distanceID, $result->firstName, $result->surname, $result->category, $result->city));
+                $runResults = $wpdb->get_results($wpdb->prepare("SELECT runID, startingNumber, time, cupPoints, position, positionSex FROM rnx_starting_results WHERE distanceID = %d AND firstName = %s AND surname = %s AND city = %s ORDER BY position ASC", $distance->distanceID, $result->firstName, $result->surname, $result->city));
                 if (!empty($runResults)) {
                     $runResultsTemp = [];
                     foreach ($runResults as &$runResult) {
@@ -489,7 +496,7 @@ remove_filter('woocommerce_get_cart_url', 'astra_woocommerce_get_cart_url');
 // Override the cart URL
 function custom_wc_get_cart_url()
 {
-    return site_url('/zamowienie/'); // Replace with your custom cart URL
+    return wpml_url_by_slug('zamowienie', 'page'); // Replace with your custom cart URL
 }
 add_filter('woocommerce_add_to_cart_redirect', 'custom_wc_get_cart_url', 100);
 
@@ -589,7 +596,7 @@ function custom_cron_event_callback()
                 list($day, $month, $year) = explode('/', $date);
                 $formattedDate = "$year-$month-$day";
                 $dateTime = new DateTime($formattedDate);
-                $dateTime->modify("-3 days");
+                $dateTime->modify("-2 days");
                 $currentDateTime = new DateTime();
 
                 // Check if the expiration date is earlier than the current date
@@ -612,6 +619,41 @@ add_action('custom_cron_event', 'custom_cron_event_callback');
 // Add possibility
 add_filter('acf/settings/remove_wp_meta_box', '__return_false');
 
+function wpml_url_by_slug(string $slug, string $post_type): ?string
+{
+    $current_lang = apply_filters('wpml_current_language', null);
+
+    // 2) Znajdź obiekt po slugu/ścieżce w JEGO języku
+    $post = get_page_by_path($slug, OBJECT, $post_type);
+
+    if (! $post instanceof WP_Post) {
+        return null; // nic nie znaleziono po podanym slugu
+    }
+
+    // 3) Zmapuj ID na tłumaczenie w języku docelowym
+    $translated_id = apply_filters('wpml_object_id', $post->ID, $post_type, false, $current_lang);
+    if (! $translated_id) {
+        return null; // brak tłumaczenia
+    }
+
+    // 4) Pobierz docelowy permalink
+    $url = get_permalink($translated_id);
+
+    // 5) (opcjonalnie) Upewnij się co do prefiksów domen/katalogów
+    //    Jeśli chcesz „przełożyć” już gotowy URL wg reguł WPML (domeny/katalogi/parametr), użyj:
+    // $url = apply_filters( 'wpml_permalink', $url, $target_lang );
+
+    return $url ?: null;
+}
+
+// Remove link for specific post ID
+// add_filter( 'post_link', function( $url, $post ) {
+//     if ( $post->ID == 5325 ) {
+//         return ''; // brak linku
+//     }
+//     return $url;
+// }, 10, 2 );
+
 // Add your custom action
 function custom_woocommerce_before_main_content()
 {
@@ -620,14 +662,14 @@ function custom_woocommerce_before_main_content()
     <div id="primary" class="content-area primary">
         <section class="ast-single-entry-banner" data-post-type="page" data-banner-layout="layout-2">
             <div class="ast-container">
-                <h1 class="entry-title" itemprop="headline">ZAPISY</h1>
+                <h1 class="entry-title" itemprop="headline"><?php esc_html_e('ZAPISY', 'woocommerce'); ?></h1>
                 <div class="ast-breadcrumbs-wrapper">
                     <div class="ast-breadcrumbs-inner">
                         <nav role="navigation" aria-label="Breadcrumbs" class="breadcrumb-trail breadcrumbs">
                             <div class="ast-breadcrumbs">
                                 <ul class="trail-items">
-                                    <li class="trail-item trail-begin"><a href="https://x.astosoft.pl/" rel="home"><span>Home</span></a></li>
-                                    <li class="trail-item trail-end"><span><span>ZAPISY</span></span></li>
+                                    <li class="trail-item trail-begin"><a href="/" rel="home"><span><?php esc_html_e('Home', 'woocommerce'); ?></span></a></li>
+                                    <li class="trail-item trail-end"><span><span><?php esc_html_e('ZAPISY', 'woocommerce'); ?></span></span></li>
                                 </ul>
                             </div>
                         </nav>
@@ -641,29 +683,29 @@ function custom_woocommerce_before_main_content()
         <main id="main" class="site-main">
             <div class="ast-woocommerce-container">
                 <div class="checkout-steps">
-                    <a class="checkout-step" href="/zapisy/">
+                    <a class="checkout-step" href="<?php echo wpml_url_by_slug('zapisy', 'page'); ?>">
                         <button>1</button>
-                        <span>wybierz bieg</span>
+                        <span><?php esc_html_e('wybierz bieg', 'woocommerce'); ?></span>
                     </a>
                     <img src="/wp-content/uploads/2024/11/checkout-separator.png" />
                     <div class="checkout-step active">
                         <button>2</button>
-                        <span>wybierz dystans</span>
+                        <span><?php esc_html_e('wybierz dystans', 'woocommerce'); ?></span>
                     </div>
                     <img src="/wp-content/uploads/2024/11/checkout-separator.png" />
-                    <a class="checkout-step" href="/zamowienie/">
+                    <a class="checkout-step" href="<?php echo wpml_url_by_slug('zamowienie', 'page'); ?>">
                         <button>3</button>
-                        <span>dane zawodnika</span>
+                        <span><?php esc_html_e('dane zawodnika', 'woocommerce'); ?></span>
                     </a>
                     <img src="/wp-content/uploads/2024/11/checkout-separator.png" />
                     <div class="checkout-step">
                         <button>4</button>
-                        <span>podsumowanie</span>
+                        <span><?php esc_html_e('podsumowanie', 'woocommerce'); ?></span>
                     </div>
                 </div>
 
                 <div class="wp-block-uagb-advanced-heading uagb-block-0bedd072">
-                    <h1 class="uagb-heading-text">wybierz dystans</h1>
+                    <h1 class="uagb-heading-text"><?php esc_html_e('wybierz dystans', 'woocommerce'); ?></h1>
                 </div>
             <?php
         }
