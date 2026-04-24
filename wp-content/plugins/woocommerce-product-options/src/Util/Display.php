@@ -28,7 +28,7 @@ final class Display
 
         ob_start();
         // AstoSoft
-        print('<h2>Dodaj do pakietu</h2>');
+        print('<h2>' . esc_html__('Dodaj do pakietu', 'woocommerce') . '</h2>');
 
         print('<div class="wpo-options-container">');
 

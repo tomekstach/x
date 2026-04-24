@@ -87,5 +87,5 @@ do_action('woocommerce_order_details_after_customer_address', 'shipping', $order
 
 </section>
 <p>
-	<a href="/listy-startowe/" class="button<?php echo esc_attr($wp_button_class); ?>">Listy startowe</a>
+	<a href="<?php echo wpml_url_by_slug('listy-startowe', 'page'); ?>" class="button<?php echo esc_attr($wp_button_class); ?>"><?php esc_html_e('', 'woocommerce'); ?></a>
 </p>

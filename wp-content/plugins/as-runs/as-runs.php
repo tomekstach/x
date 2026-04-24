@@ -110,8 +110,8 @@ function as_runs_validation_import_callback($data)
     ];
 
     $sexPlace = [
-        'mezczyzna' => 1,
-        'kobieta' => 1,
+        'mezczyzna' => 0,
+        'kobieta' => 0,
     ];
 
     $runID = (int) $data['run'];
@@ -172,6 +172,10 @@ function as_runs_validation_import_callback($data)
         if (strpos($time, ':') === false) {
             $time = gmdate('H:i:s', $time);
         } else {
+            // If time is in format MM:SS, add 00: at the beginning
+            if (substr_count($time, ':') == 1) {
+                $time = '00:' . $time;
+            }
             $time = gmdate('H:i:s', strtotime($time));
         }
 
@@ -187,6 +191,19 @@ function as_runs_validation_import_callback($data)
                 $categoryPositions[$category . ' - ' . $sex] = $categoryPositions[$category . ' - ' . $sex] + 1;
             }
             $categoryPosition = $categoryPositions[$category . ' - ' . $sex];
+
+            if ($categoryPosition > 30) {
+                $cupPoints = 900 - ($categoryPosition - 31);
+            } else {
+                $cupPoints = $cupPointsTable30[$categoryPosition];
+            }
+
+            if ($runID === 5 or $runID === 11) {
+                // For Wielki Finał add extra points
+                $extraPoints = 101 - $categoryPosition;
+                $extraPoints = max($extraPoints, 0);
+                $cupPoints += $extraPoints;
+            }
         } else {
             $sex = $line[4];
             if ($sex == 'M') {
@@ -195,13 +212,20 @@ function as_runs_validation_import_callback($data)
                 $sex = 'kobieta';
             }
 
+            $sexPlace[$sex]++;
+
             if ($sexPlace[$sex] > 30) {
                 $cupPoints = 900 - ($sexPlace[$sex] - 31);
             } else {
                 $cupPoints = $cupPointsTable30[$sexPlace[$sex]];
             }
 
-            $sexPlace[$sex]++;
+            if (($runID === 5 or $runID === 11) and $distanceID < 7) {
+                // For Wielki Finał add extra points
+                $extraPoints = 101 - $sexPlace[$sex];
+                $extraPoints = max($extraPoints, 0);
+                $cupPoints += $extraPoints;
+            }
 
             // Convert birthday to category
             $category = getRunCategory($birthday, $sex, $distanceName);
@@ -228,7 +252,7 @@ function as_runs_validation_import_callback($data)
             'runID' => $runID,
             'distanceID' => $distanceID,
             'position' => $position,
-            'positionSex' => $sexPlace[$sex] - 1 ?? 0,
+            'positionSex' => $sexPlace[$sex] ?? 0,
             'categoryPosition' => $categoryPosition,
             'time' => $time,
             'surname' => $surname,
@@ -323,7 +347,8 @@ function as_runs_import_settings_cb()
     <select name="option_import_field_name[category]">
         <option value=""></option>
         <option value="3 - 5 LAT">3 - 5 LAT</option>
-        <option value="6 - 9 LAT">6 - 9 LAT</option>
+        <option value="6 - 7 LAT">6 - 7 LAT</option>
+        <option value="8 - 9 LAT">8 - 9 LAT</option>
         <option value="10 - 12 LAT">10 - 12 LAT</option>
         <option value="13 - 15 LAT">13 - 15 LAT</option>
     </select>
@@ -425,8 +450,10 @@ function getRunCategory($birthDate, $sex, $distance)
     if ($distance == 'Kids') {
         if ($age >= 3 && $age <= 5) {
             $category = '3 - 5 LAT';
-        } else if ($age >= 6 && $age <= 9) {
-            $category = '6 - 9 LAT';
+        } else if ($age >= 6 && $age <= 7) {
+            $category = '6 - 7 LAT';
+        } else if ($age >= 8 && $age <= 9) {
+            $category = '8 - 9 LAT';
         } else if ($age >= 10 && $age <= 12) {
             $category = '10 - 12 LAT';
         } else if ($age >= 13 && $age <= 15) {
