@@ -441,10 +441,10 @@ add_action('admin_menu', 'as_runs_page');
 
 function getRunCategory($birthDate, $sex, $distance)
 {
-    // Get year from birthDate
-    $birth = new DateTime($birthDate);
+    // Get year from birthDat
+    $birthYear = (int) substr($birthDate, 0, 4);
     $today = new DateTime();
-    $age = $today->diff($birth)->y;
+    $age = $today->format('Y') - $birthYear;
     $category = '';
 
     if ($distance == 'Kids') {
@@ -468,18 +468,30 @@ function getRunCategory($birthDate, $sex, $distance)
         $category = 'K';
     }
 
-    if ($age < 30) {
-        $category .= '20';
-    } else if ($age < 40) {
-        $category .= '30';
-    } else if ($age < 50) {
-        $category .= '40';
-    } else if ($age < 60) {
-        $category .= '50';
-    } else if ($age < 70) {
-        $category .= '60';
+    if ($distance == 'Start') {
+        if ($age < 16) {
+            $category .= ' U0';
+        } else if ($age < 18) {
+            $category .= ' MP U18';
+        } else if ($age < 20) {
+            $category .= ' MP U20';
+        } else {
+            $category .= ' AMATOR';
+        }
     } else {
-        $category .= '60+';
+        if ($age < 30) {
+            $category .= '20';
+        } else if ($age < 40) {
+            $category .= '30';
+        } else if ($age < 50) {
+            $category .= '40';
+        } else if ($age < 60) {
+            $category .= '50';
+        } else if ($age < 70) {
+            $category .= '60';
+        } else {
+            $category .= '60+';
+        }
     }
 
     return $category;
