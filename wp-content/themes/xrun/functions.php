@@ -448,7 +448,7 @@ function get_xrun_cup_results($data)
                     });
                     $i = 0;
                     foreach ($runResultsTemp as $runResultTemp) {
-                        if ($i > 2) {
+                        if ($i > 3) {
                             break;
                         }
                         $distanceResults['results'][$key]->cupPoints += $runResultTemp;
