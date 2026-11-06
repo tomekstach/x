@@ -14,6 +14,17 @@
  */
 define('CHILD_THEME_XRUN_VERSION', '1.0.0');
 
+function searchForKeyValue($key, $array)
+{
+    foreach ($array as $k => $val) {
+        $objectData = $val->get_data();
+        if ($objectData['key'] == $key) {
+            return $objectData['value'];
+        }
+    }
+    return null;
+}
+
 /**
  * Enqueue styles
  */
@@ -46,8 +57,23 @@ add_shortcode('post_title', 'post_title_shortcode');
 
 function custom_remove_all_quantity_fields($return, $product)
 {
+    // Każde dziecko to osobna pozycja Kids, więc WooCommerce nie może ich odrzucać jako "już dodanych"
+    if ($product instanceof WC_Product_Variation && xrun_is_kids_variation($product->get_id())) {
+        return false;
+    }
+
     return true;
 }
+
+// Pozycje Kids zawsze mają ilość 1 (pole ilości jest ukryte)
+add_filter('woocommerce_quantity_input_args', function ($args, $product) {
+    if ($product instanceof WC_Product_Variation && xrun_is_kids_variation($product->get_id())) {
+        $args['min_value'] = 1;
+        $args['max_value'] = 1;
+    }
+
+    return $args;
+}, 10, 2);
 
 add_filter('woocommerce_is_sold_individually', 'custom_remove_all_quantity_fields', 10, 2);
 
@@ -92,45 +118,26 @@ function custom_before_order_review_heading()
 add_filter('woocommerce_add_to_cart_validation', 'allowed_products_variation_in_the_cart', 10, 5);
 function allowed_products_variation_in_the_cart($passed, $product_id, $quantity, $variation_id, $variations = [])
 {
-    $kids = false;
-    $adults = false;
+    // Rodzic może zapisać siebie tylko raz (dystans inny niż Kids), a dzieci (dystans Kids) dowolnie wiele (każde dziecko to osobna pozycja)
+    $is_kids = xrun_is_kids_variation($variation_id);
 
-    $variation_obj = new WC_Product_Variation($variation_id);
-    $attributes = $variation_obj->get_attributes();
-
-    if (array_key_exists('dystans', $attributes) and array_key_exists('typ', $attributes)) {
-        if ($attributes['dystans'] === 'Kids' and $attributes['typ'] === 'Bieg') {
-            $kids = true;
-        } elseif ($attributes['typ'] === 'Bieg') {
-            $adults = true;
+    foreach (WC()->cart->get_cart() as $cart_item) {
+        if ($cart_item['product_id'] != $product_id) {
+            continue;
         }
-    }
 
-    foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
-        $cart_product_id = $cart_item['product_id'];
-
-        if (array_key_exists('variation', $cart_item)) {
-            if (array_key_exists('attribute_typ', $cart_item['variation'])) {
-                if ($cart_item['variation']['attribute_typ'] === 'Bieg') {
-                    if ($cart_product_id == $product_id) {
-                        wc_add_notice(__('Ten bieg został już dodany do koszyka!', 'woocommerce'), 'error');
-                        $passed = false; // don't add the new product to the cart
-                        break;
-                    }
-
-                    if ($cart_item['variation']['attribute_dystans'] === 'Kids') {
-                        $kids = true;
-                    } else {
-                        $adults = true;
-                    }
-                }
-            }
+        if (($cart_item['variation']['attribute_typ'] ?? '') !== 'Bieg') {
+            continue;
         }
-    }
 
-    if ($kids and $adults) {
-        wc_add_notice(__('Nie można dodać biegu Kids i dorosłego do koszyka jednocześnie!', 'woocommerce'), 'error');
-        $passed = false; // don't add the new product to the cart
+        if (strcasecmp($cart_item['variation']['attribute_dystans'] ?? '', 'Kids') === 0) {
+            continue;
+        }
+
+        if (!$is_kids) {
+            wc_add_notice(__('Ten bieg został już dodany do koszyka!', 'woocommerce'), 'error');
+            return false;
+        }
     }
 
     return $passed;
@@ -177,6 +184,7 @@ function custom_update_order($order_id)
         $attributes = $product->get_attributes();
 
         if ($attributes['typ'] === 'Bieg') {
+            $itemMetaData = $item->get_data()['meta_data'];
             $distance = searchForValue($attributes['dystans'], 'name', $distances);
             $run = searchForValue($productID, 'productID', $runs);
 
@@ -186,51 +194,104 @@ function custom_update_order($order_id)
             $birthDate = '';
             $alarmPhone = '';
 
-            foreach ($order->meta_data as $metaItem) {
-                $data = $metaItem->get_data();
+            if ($attributes['dystans'] === 'Kids') {
+                $country = searchForKeyValue('Kraj', $itemMetaData);
+                $city = searchForKeyValue('Miejscowość', $itemMetaData);
+                $firstName = searchForKeyValue('Imię dziecka', $itemMetaData);
+                $surname = searchForKeyValue('Nazwisko dziecka', $itemMetaData);
+                $sex = searchForKeyValue('Płeć', $itemMetaData);
 
-                switch ($data['key']) {
-                    case 'billing_birth_date':
-                        $birthDate = $metaItem->value;
-                        break;
-                    case 'billing_sex':
-                        $sex = $metaItem->value;
-                        if ($sex === 'mezczyzna') {
-                            $sex = 'mezczyzna';
-                        } else {
-                            $sex = 'kobieta';
-                        }
-                        break;
-                    case 'billing_alarm_phone':
-                        $alarmPhone = $metaItem->value;
-                        break;
-                    case 'billing_meal':
-                        $meal = $metaItem->value;
-                        if ($meal === 'miesny') {
-                            $meal = 'miesny';
-                        } else {
-                            $meal = 'vege';
-                        }
-                        break;
-                    case 'billing_club':
-                        $club = $metaItem->value;
-                        if (strlen(trim($club)) > 0) {
-                            $club = $club;
-                        } else {
-                            $club = '-';
-                        }
-                        break;
+                if ($sex === 'Mężczyzna') {
+                    $sex = 'mezczyzna';
+                } else {
+                    $sex = 'kobieta';
                 }
+
+                $meal = searchForKeyValue('Posiłek', $itemMetaData);
+
+                if ($meal === 'Mięsny') {
+                    $meal = 'miesny';
+                } else {
+                    $meal = 'vege';
+                }
+
+                $birthDate = searchForKeyValue('Data urodzenia', $itemMetaData);
+                // Reverse the birth date format from DD-MM-YYYY to YYYY-MM-DD
+                if (!empty($birthDate)) {
+                    $birthDateParts = explode('-', $birthDate);
+                    if (count($birthDateParts) === 3) {
+                        $birthDate = $birthDateParts[2] . '-' . $birthDateParts[1] . '-' . $birthDateParts[0];
+                    }
+                }
+                $club = searchForKeyValue('Klub', $itemMetaData);
+
+                if (strlen(trim($club)) > 0) {
+                    $club = $club;
+                } else {
+                    $club = '-';
+                }
+
+                foreach ($order->meta_data as $metaItem) {
+                    $data = $metaItem->get_data();
+
+                    switch ($data['key']) {
+                        case 'billing_alarm_phone':
+                            $alarmPhone = $metaItem->value;
+                            break;
+                    }
+                }
+            } else {
+                foreach ($order->meta_data as $metaItem) {
+                    $data = $metaItem->get_data();
+
+                    switch ($data['key']) {
+                        case 'billing_birth_date':
+                            $birthDate = $metaItem->value;
+                            break;
+                        case 'billing_sex':
+                            $sex = $metaItem->value;
+                            if ($sex === 'mezczyzna') {
+                                $sex = 'mezczyzna';
+                            } else {
+                                $sex = 'kobieta';
+                            }
+                            break;
+                        case 'billing_alarm_phone':
+                            $alarmPhone = $metaItem->value;
+                            break;
+                        case 'billing_meal':
+                            $meal = $metaItem->value;
+                            if ($meal === 'miesny') {
+                                $meal = 'miesny';
+                            } else {
+                                $meal = 'vege';
+                            }
+                            break;
+                        case 'billing_club':
+                            $club = $metaItem->value;
+                            if (strlen(trim($club)) > 0) {
+                                $club = $club;
+                            } else {
+                                $club = '-';
+                            }
+                            break;
+                    }
+                }
+
+                $firstName = $order->data['billing']['first_name'];
+                $surname = $order->data['billing']['last_name'];
+                $city = $order->data['billing']['city'];
+                $country = $order->data['billing']['country'];
             }
 
             $startingList = [
                 'orderNumber' => $order_id,
-                'firstName' => $order->data['billing']['first_name'],
-                'surname' => $order->data['billing']['last_name'],
+                'firstName' => $firstName,
+                'surname' => $surname,
                 'address' => $order->data['billing']['address_1'],
-                'city' => $order->data['billing']['city'],
+                'city' => $city,
                 'postcode' => $order->data['billing']['postcode'],
-                'country' => $order->data['billing']['country'],
+                'country' => $country,
                 'email' => $order->data['billing']['email'],
                 'phone' => $order->data['billing']['phone'],
                 'birthDate' => $birthDate,
@@ -521,8 +582,19 @@ function custom_wc_get_cart_url()
 }
 add_filter('woocommerce_add_to_cart_redirect', 'custom_wc_get_cart_url', 100);
 
-// Optionally, you can also override the cart URL in other places
-add_filter('woocommerce_get_cart_url', 'custom_wc_get_cart_url', 100);
+// Na stronie koszyka akcja formularza (wc_get_cart_url) musi wskazywać na koszyk, a nie na zamówienie.
+// Inaczej cart.js po AJAX-owym odświeżeniu (np. po błędnym kuponie) dostaje stronę zamówienia bez formularza koszyka i usuwa cały koszyk.
+function custom_wc_get_cart_url_filter($url)
+{
+    if (function_exists('is_cart') && is_cart()) {
+        $cart_page_id = wc_get_page_id('cart');
+
+        return $cart_page_id > 0 ? get_permalink($cart_page_id) : $url;
+    }
+
+    return custom_wc_get_cart_url();
+}
+add_filter('woocommerce_get_cart_url', 'custom_wc_get_cart_url_filter', 100);
 
 /**
  * Function to remove change prices
@@ -965,6 +1037,135 @@ function xrun_no_shipping_for_bieg(bool $needs_shipping): bool
     return $needs_shipping;
 }
 
+/**
+ * Bieg Kids: każde dziecko dodane przez powielanie pól w APF Pro trafia do koszyka jako osobna pozycja
+ * (ten sam wariant Kids, dane tylko jednego dziecka), dzięki czemu opłata jest naliczana za każde dziecko.
+ */
+function xrun_is_kids_variation($variation_id)
+{
+    if (empty($variation_id)) {
+        return false;
+    }
+
+    $variation = wc_get_product($variation_id);
+
+    return $variation instanceof WC_Product_Variation
+        && strcasecmp($variation->get_variation_attributes(false)['dystans'] ?? '', 'Kids') === 0;
+}
+
+function xrun_wapf_fingerprint($product_id, $variation_id, $wapf)
+{
+    usort($wapf, function ($a, $b) {
+        return strcmp($a['id'], $b['id']);
+    });
+
+    foreach ($wapf as &$field) {
+        unset($field['clone_idx']);
+    }
+
+    return md5(json_encode([(int) $product_id, (int) $variation_id, $wapf]));
+}
+
+// Dane dodatkowych dzieci czekają tutaj na dodanie do koszyka, kluczem jest wapf_key pierwszej pozycji
+global $xrun_pending_kids;
+$xrun_pending_kids = [];
+
+function xrun_split_kids_into_cart_items($cart_item_data, $product_id, $variation_id)
+{
+    global $xrun_pending_kids;
+
+    if (empty($cart_item_data['wapf']) || !is_array($cart_item_data['wapf']) || !xrun_is_kids_variation($variation_id)) {
+        return $cart_item_data;
+    }
+
+    // Unikalny znacznik sprawia, że każda pozycja Kids ma własny identyfikator w koszyku,
+    // więc WooCommerce (produkty sprzedawane pojedynczo) nie odrzuci kolejnego dziecka jako "już dodanego"
+    if (empty($cart_item_data['xrun_kid_uid'])) {
+        $cart_item_data['xrun_kid_uid'] = wp_generate_uuid4();
+    }
+
+    $cloned_ids = [];
+    $clone_indexes = [];
+    foreach ($cart_item_data['wapf'] as $field) {
+        if (!empty($field['clone_idx'])) {
+            $cloned_ids[$field['id']] = true;
+            $clone_indexes[$field['clone_idx']] = true;
+        }
+    }
+
+    if (empty($clone_indexes)) {
+        return $cart_item_data;
+    }
+
+    ksort($clone_indexes);
+
+    $children = [];
+    foreach (array_keys($clone_indexes) as $clone_idx) {
+        $child = [];
+        foreach ($cart_item_data['wapf'] as $field) {
+            $field_clone_idx = intval($field['clone_idx'] ?? 0);
+
+            if ($field_clone_idx === $clone_idx) {
+                // etykietę bierzemy z pola podstawowego, bez przedrostka powielenia
+                foreach ($cart_item_data['wapf'] as $base) {
+                    if ($base['id'] === $field['id'] && empty($base['clone_idx'])) {
+                        $field['label'] = $base['label'];
+                        break;
+                    }
+                }
+                $field['clone_idx'] = 0;
+                $child[] = $field;
+            } elseif ($field_clone_idx === 0 && !isset($cloned_ids[$field['id']])) {
+                $child[] = $field;
+            }
+        }
+        $children[] = $child;
+    }
+
+    // Pola podstawowe (clone_idx = 0) tworzą pierwsze dziecko
+    $first = array_values(array_filter($cart_item_data['wapf'], function ($field) {
+        return empty($field['clone_idx']);
+    }));
+
+    $cart_item_data['wapf'] = $first;
+    $cart_item_data['wapf_key'] = xrun_wapf_fingerprint($product_id, $variation_id, $first);
+
+    $xrun_pending_kids[$cart_item_data['wapf_key']] = [];
+    foreach ($children as $child) {
+        $xrun_pending_kids[$cart_item_data['wapf_key']][] = [
+            'wapf' => $child,
+            'wapf_key' => xrun_wapf_fingerprint($product_id, $variation_id, $child),
+            'wapf_field_groups' => $cart_item_data['wapf_field_groups'] ?? [],
+            'xrun_kid_uid' => wp_generate_uuid4(),
+        ];
+    }
+
+    return $cart_item_data;
+}
+add_filter('woocommerce_add_cart_item_data', 'xrun_split_kids_into_cart_items', 20, 3);
+
+function xrun_add_kids_cart_items($cart_item_key, $product_id, $quantity, $variation_id, $variation, $cart_item_data)
+{
+    global $xrun_pending_kids;
+
+    $key = $cart_item_data['wapf_key'] ?? '';
+    if ($key === '' || empty($xrun_pending_kids[$key])) {
+        return;
+    }
+
+    $children = $xrun_pending_kids[$key];
+    unset($xrun_pending_kids[$key]);
+
+    // Walidację APF przeszło już całe zgłoszenie, a pliki nie powinny być przetwarzane ponownie
+    add_filter('wapf/skip_cart_validation', '__return_true');
+
+    foreach ($children as $child_data) {
+        WC()->cart->add_to_cart($product_id, 1, $variation_id, $variation, $child_data);
+    }
+
+    remove_filter('wapf/skip_cart_validation', '__return_true');
+}
+add_action('woocommerce_add_to_cart', 'xrun_add_kids_cart_items', 20, 6);
 
 // Add your custom action
 function custom_woocommerce_before_main_content()

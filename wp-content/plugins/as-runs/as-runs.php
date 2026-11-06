@@ -24,6 +24,9 @@ function as_runs_validation_callback($data)
 {
     global $wpdb;
 
+    $exportForQr = isset($_POST['export_qr']);
+    $bibNumber = max(1, (int) ($data['bib_start'] ?? 1));
+
     $runID = (int) $data['run'];
     $distanceID = (int) $data['distance'];
 
@@ -42,14 +45,16 @@ function as_runs_validation_callback($data)
     $players = $wpdb->get_results($pmquery);
 
     // Prepare CSV file
-    $filename = get_home_path() . 'wp-content/uploads/listy/listy-startowe-' . $runAlias . '-' . $distanceAlias . '-' . date('Y-m-d') . '.csv';
-    $filenameToDisplay = 'listy-startowe-' . $runAlias . '-' . $distanceAlias . '-' . date('Y-m-d') . '.csv';
+    $filePrefix = $exportForQr ? 'listy-startowe-qr-' : 'listy-startowe-';
+    $filename = get_home_path() . 'wp-content/uploads/listy/' . $filePrefix . $runAlias . '-' . $distanceAlias . '-' . date('Y-m-d') . '.csv';
+    $filenameToDisplay = $filePrefix . $runAlias . '-' . $distanceAlias . '-' . date('Y-m-d') . '.csv';
     $fp = fopen($filename, 'w');
-    fputcsv($fp, ['Numer zamówienia', 'Imię', 'Nazwisko', 'Adres', 'Miejscowość', 'Kod pocztowy', 'Płeć', 'Kraj', 'Data urodzenia', 'Klub', 'Numer telefonu alarmowego', 'Numer telefonu', 'Email', 'Status płatności', 'Posiłek'], ';');
+    $headers = $exportForQr
+        ? ['Bib', 'FirstName', 'LastName', 'Street', 'City', 'ZIP', 'Sex', 'Nation', 'DateOfBirth', 'Club', 'EmergencyNnumber', 'Phone', 'EMail', 'Payment', 'Meal', 'IdentificationNo']
+        : ['Numer startowy', 'Imię', 'Nazwisko', 'Adres', 'Miejscowość', 'Kod pocztowy', 'Płeć', 'Kraj', 'Data urodzenia', 'Klub', 'Numer telefonu alarmowego', 'Numer telefonu', 'Email', 'Status płatności', 'Posiłek'];
+    fputcsv($fp, $headers, ';');
 
     foreach ($players as $player) {
-        $orderID = (int) $player->orderNumber;
-
         if ($player->paymentStatus == 'tak') {
             $status = 'Opłacone';
         } else {
@@ -60,7 +65,13 @@ function as_runs_validation_callback($data)
             $player->club = '';
         }
 
-        fputcsv($fp, [$orderID, $player->firstName, $player->surname, $player->address, $player->city, $player->postCode, $player->sex, $player->country, $player->birthDate, $player->club, $player->alarmPhone, $player->phone, $player->email, $status, $player->meal], ';');
+        $firstColumn = $bibNumber++;
+        $row = [$firstColumn, $player->firstName, $player->surname, $player->address, $player->city, $player->postCode, $player->sex, $player->country, $player->birthDate, $player->club, $player->alarmPhone, $player->phone, $player->email, $status, $player->meal];
+        if ($exportForQr) {
+            $identificationNo = $player->firstName . $player->surname . $player->birthDate . wp_rand(1, 100);
+            $row[] = remove_accents($identificationNo);
+        }
+        fputcsv($fp, $row, ';');
     }
 
     fclose($fp);
@@ -306,6 +317,8 @@ function as_runs_main_settings_cb()
         }
         ?>
     </select>
+    <label for="as-runs-bib-start">Numer startowy od</label>
+    <input type="number" id="as-runs-bib-start" name="option_field_name[bib_start]" min="1" step="1" value="1">
 <?php
 }
 
@@ -374,6 +387,7 @@ function as_runs_page_html()
             <?php settings_fields('as_runs_options_group'); ?>
             <?php do_settings_sections('as_runs_page_html'); ?>
             <?php submit_button('Eksport listy startowej'); ?>
+            <?php submit_button('Eksport listy do QR kodów', 'secondary', 'export_qr'); ?>
         </form>
     </div>
 <?php
